@@ -1,15 +1,17 @@
-
 import argparse
-from collections import OrderedDict
+import random
 
 import flwr as fl
+import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms
 
+from common.config import (
+    CLASSES, IMAGE_SIZE, BATCH_SIZE, LOCAL_EPOCHS
+)
 from common.model import create_model, get_parameters, set_parameters
-from common.config import CLASSES, IMAGE_SIZE, BATCH_SIZE, LOCAL_EPOCHS
 
 
 def load_data(data_dir):
@@ -27,19 +29,27 @@ def load_data(data_dir):
 
     if dataset.classes != CLASSES:
         raise ValueError(
-            f"Expected class folders {CLASSES}, "
-            f"but found {dataset.classes} in {data_dir}"
+            f"Expected classes {CLASSES}, found {dataset.classes}"
         )
+    if len(dataset) < 2:
+        raise ValueError("At least two images are required for a split.")
 
-    if len(dataset) == 0:
-        raise ValueError(f"No images found in {data_dir}")
+    val_size = max(1, int(0.2 * len(dataset)))
+    train_size = len(dataset) - val_size
 
-    return DataLoader(
-        dataset,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-        num_workers=0,
-    ), len(dataset)
+    generator = torch.Generator().manual_seed(42)
+    train_set, val_set = random_split(
+        dataset, [train_size, val_size], generator=generator
+    )
+
+    trainloader = DataLoader(
+        train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=0
+    )
+    valloader = DataLoader(
+        val_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=0
+    )
+
+    return trainloader, valloader, train_size, val_size
 
 
 class BrainTumorClient(fl.client.NumPyClient):
@@ -48,7 +58,13 @@ class BrainTumorClient(fl.client.NumPyClient):
             "cuda" if torch.cuda.is_available() else "cpu"
         )
         self.model = create_model().to(self.device)
-        self.trainloader, self.num_examples = load_data(data_dir)
+        (
+            self.trainloader,
+            self.valloader,
+            self.num_train,
+            self.num_val,
+        ) = load_data(data_dir)
+
         self.loss_fn = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.Adam(
             self.model.parameters(), lr=0.0001
@@ -61,7 +77,9 @@ class BrainTumorClient(fl.client.NumPyClient):
         set_parameters(self.model, parameters)
         self.model.train()
 
-        total_loss = 0.0
+        loss_sum = 0.0
+        seen = 0
+
         for _ in range(LOCAL_EPOCHS):
             for images, labels in self.trainloader:
                 images = images.to(self.device)
@@ -73,26 +91,53 @@ class BrainTumorClient(fl.client.NumPyClient):
                 loss.backward()
                 self.optimizer.step()
 
-                total_loss += loss.item() * images.size(0)
+                loss_sum += loss.item() * images.size(0)
+                seen += images.size(0)
 
-        average_loss = total_loss / (
-            self.num_examples * LOCAL_EPOCHS
-        )
-
+        train_loss = loss_sum / max(seen, 1)
         print(
-            f"Local training complete: "
-            f"{self.num_examples} images, loss={average_loss:.4f}"
+            f"Local training complete: {self.num_train} training images, "
+            f"loss={train_loss:.4f}"
         )
 
         return (
             get_parameters(self.model),
-            self.num_examples,
-            {"train_loss": float(average_loss)},
+            self.num_train,
+            {"train_loss": float(train_loss)},
         )
 
     def evaluate(self, parameters, config):
         set_parameters(self.model, parameters)
-        return 0.0, self.num_examples, {}
+        self.model.eval()
+
+        loss_sum = 0.0
+        correct = 0
+        total = 0
+
+        with torch.no_grad():
+            for images, labels in self.valloader:
+                images = images.to(self.device)
+                labels = labels.to(self.device)
+
+                outputs = self.model(images)
+                loss = self.loss_fn(outputs, labels)
+
+                loss_sum += loss.item() * images.size(0)
+                correct += (outputs.argmax(dim=1) == labels).sum().item()
+                total += labels.size(0)
+
+        if total == 0:
+            return 0.0, 0, {"accuracy": 0.0}
+
+        val_loss = loss_sum / total
+        accuracy = correct / total
+
+        print(
+            f"Local validation: loss={val_loss:.4f}, "
+            f"accuracy={accuracy:.2%}, samples={total}"
+        )
+
+        return float(val_loss), total, {"accuracy": float(accuracy)}
 
 
 def main():
@@ -102,7 +147,6 @@ def main():
     args = parser.parse_args()
 
     client = BrainTumorClient(args.data)
-
     fl.client.start_client(
         server_address=args.server,
         client=client.to_client(),
