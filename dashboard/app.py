@@ -1,5 +1,10 @@
 
+import sys
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import torch
 from flask import Flask, render_template_string, request
@@ -11,8 +16,11 @@ from common.model import create_model
 
 app = Flask(__name__)
 
-MODEL_PATH = Path("models/global_model.pth")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+MODEL_PATH = PROJECT_ROOT / "models" / "global_model.pth"
+
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
 
 preprocess = transforms.Compose([
     transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
@@ -28,62 +36,73 @@ model = create_model().to(device)
 
 PAGE = """
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-    <title>BrainTumorFL Dashboard</title>
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BrainTumorFL Dashboard</title>
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 720px;
+            max-width: 760px;
             margin: 40px auto;
-            padding: 0 18px;
-            color: #222;
+            padding: 0 20px;
+            color: #202938;
+            background: #f7f9fc;
         }
         .panel {
-            border: 1px solid #ddd;
-            border-radius: 12px;
+            background: white;
+            border: 1px solid #dce2ea;
+            border-radius: 14px;
             padding: 24px;
-            margin-top: 20px;
+            margin: 20px 0;
         }
         button {
-            padding: 10px 16px;
+            background: #2457c5;
+            color: white;
+            border: 0;
+            border-radius: 8px;
+            padding: 12px 18px;
             cursor: pointer;
         }
+        input { margin: 16px 0; max-width: 100%; }
+        .result { overflow-wrap: anywhere; }
+        .note { color: #5c6678; font-size: 14px; }
     </style>
 </head>
 <body>
     <h1>BrainTumorFL Dashboard</h1>
-    <p>Federated brain MRI image classification demo</p>
+    <p>Federated brain MRI classification demonstration</p>
 
     <div class="panel">
         <h2>Upload an MRI image</h2>
         <form method="post" enctype="multipart/form-data">
             <input type="file" name="image"
                    accept=".png,.jpg,.jpeg" required>
-            <button type="submit">Predict</button>
+            <br>
+            <button type="submit">Predict class</button>
         </form>
     </div>
 
     {% if message %}
-    <div class="panel">
-        <h3>{{ message }}</h3>
+    <div class="panel result">
+        <h2>{{ message }}</h2>
         {% if prediction %}
             <p>Predicted class: <strong>{{ prediction }}</strong></p>
-            <p>Model confidence:
-               {{ "%.2f"|format(confidence * 100) }}%</p>
-            <h4>Class probabilities</h4>
+            <p>Model confidence: {{ "%.2f"|format(confidence * 100) }}%</p>
+            <h3>Class probabilities</h3>
             <ul>
             {% for name, probability in probabilities %}
-                <li>{{ name }}:
-                    {{ "%.2f"|format(probability * 100) }}%</li>
+                <li>{{ name }}: {{ "%.2f"|format(probability * 100) }}%</li>
             {% endfor %}
             </ul>
         {% endif %}
     </div>
     {% endif %}
 
-    <p><small>Research demo only; not a medical diagnosis.</small></p>
+    <p class="note">
+        Research demonstration only. This prediction is not a medical diagnosis.
+    </p>
 </body>
 </html>
 """
@@ -99,12 +118,13 @@ def index():
     if request.method == "POST":
         uploaded = request.files.get("image")
 
-        if not uploaded or not uploaded.filename:
+        if uploaded is None or not uploaded.filename:
             message = "Please select an image."
 
-        elif not MODEL_PATH.exists():
+        elif not MODEL_PATH.is_file():
             message = (
-                "Global model not found. Run federated training first."
+                "The global model is not available yet. "
+                "Start federated training and wait for aggregation."
             )
 
         else:
@@ -123,24 +143,23 @@ def index():
                 with torch.no_grad():
                     outputs = model(tensor)
                     probs = torch.softmax(outputs, dim=1)[0]
-                    conf, index = torch.max(probs, dim=0)
+                    confidence_tensor, class_index = torch.max(probs, dim=0)
 
-                prediction = CLASSES[int(index)]
-                confidence = float(conf)
+                prediction = CLASSES[int(class_index.item())]
+                confidence = float(confidence_tensor.item())
 
                 probabilities = sorted(
                     [
-                        (CLASSES[i], float(probs[i]))
+                        (CLASSES[i], float(probs[i].item()))
                         for i in range(len(CLASSES))
                     ],
                     key=lambda item: item[1],
                     reverse=True,
                 )
-
                 message = "Prediction complete"
 
-            except Exception as exc:
-                message = f"Could not process image: {exc}"
+            except (OSError, ValueError, RuntimeError) as exc:
+                message = f"Could not process the image or model: {exc}"
 
     return render_template_string(
         PAGE,
