@@ -1,4 +1,3 @@
-
 CLASSES = [
     "glioma",
     "meningioma",
@@ -6,8 +5,8 @@ CLASSES = [
     "pituitary",
 ]
 
-NUM_CLASSES = len(CLASSES)
-IMAGE_SIZE = 224
+NUM_CLASSES = 4
+IMAGE_SIZE = 128
 BATCH_SIZE = 16
 LOCAL_EPOCHS = 2
 NUM_ROUNDS = 3
