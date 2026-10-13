@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Local datasets
+data/
+datasets/
+Training/
+Testing/
+
+# Model weights and checkpoints
+*.pt
+*.pth
+*.onnx
+
+# Generated outputs
+metrics.json
+results/
+runs/
+.DS_Store
