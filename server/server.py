@@ -42,13 +42,13 @@ def main():
     )
 
     strategy = SavingFedAvg(
-        fraction_fit=1.0,
-        fraction_evaluate=0.0,
-        min_fit_clients=2,
-        min_evaluate_clients=0,
-        min_available_clients=2,
-        initial_parameters=initial_parameters,
-    )
+    fraction_fit=1.0,
+    fraction_evaluate=1.0,
+    min_fit_clients=2,
+    min_evaluate_clients=2,
+    min_available_clients=2,
+    initial_parameters=initial_parameters,
+)
 
     print("Starting BrainTumorFL server...")
     print("Waiting for both clients to connect...")
