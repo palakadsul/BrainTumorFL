@@ -1,17 +1,38 @@
+
 import argparse
 import random
+from pathlib import Path
 
 import flwr as fl
-import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets, transforms
 
 from common.config import (
-    CLASSES, IMAGE_SIZE, BATCH_SIZE, LOCAL_EPOCHS
+    CLASSES,
+    IMAGE_SIZE,
+    BATCH_SIZE,
+    LOCAL_EPOCHS,
 )
 from common.model import create_model, get_parameters, set_parameters
+
+
+# Paths are relative to the project, not the current terminal directory.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+MODEL_DIR = PROJECT_ROOT / "models"
+MODEL_PATH = MODEL_DIR / "global_model.pth"
+
+
+def save_global_weights(model):
+    """Save the latest received global model for the local dashboard."""
+    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+    temp_path = MODEL_PATH.with_suffix(".tmp")
+    torch.save(model.state_dict(), temp_path)
+    temp_path.replace(MODEL_PATH)
+
+    print(f"Latest global weights saved to: {MODEL_PATH}")
 
 
 def load_data(data_dir):
@@ -31,6 +52,7 @@ def load_data(data_dir):
         raise ValueError(
             f"Expected classes {CLASSES}, found {dataset.classes}"
         )
+
     if len(dataset) < 2:
         raise ValueError("At least two images are required for a split.")
 
@@ -39,14 +61,23 @@ def load_data(data_dir):
 
     generator = torch.Generator().manual_seed(42)
     train_set, val_set = random_split(
-        dataset, [train_size, val_size], generator=generator
+        dataset,
+        [train_size, val_size],
+        generator=generator,
     )
 
     trainloader = DataLoader(
-        train_set, batch_size=BATCH_SIZE, shuffle=True, num_workers=0
+        train_set,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=0,
     )
+
     valloader = DataLoader(
-        val_set, batch_size=BATCH_SIZE, shuffle=False, num_workers=0
+        val_set,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=0,
     )
 
     return trainloader, valloader, train_size, val_size
@@ -57,7 +88,9 @@ class BrainTumorClient(fl.client.NumPyClient):
         self.device = torch.device(
             "cuda" if torch.cuda.is_available() else "cpu"
         )
+
         self.model = create_model().to(self.device)
+
         (
             self.trainloader,
             self.valloader,
@@ -67,16 +100,21 @@ class BrainTumorClient(fl.client.NumPyClient):
 
         self.loss_fn = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=0.0001
+            self.model.parameters(),
+            lr=0.0001,
         )
 
     def get_parameters(self, config):
         return get_parameters(self.model)
 
     def fit(self, parameters, config):
+        # Receive the latest global model from the server.
         set_parameters(self.model, parameters)
-        self.model.train()
 
+        # Save these received global weights for the prediction dashboard.
+        save_global_weights(self.model)
+
+        self.model.train()
         loss_sum = 0.0
         seen = 0
 
@@ -95,11 +133,13 @@ class BrainTumorClient(fl.client.NumPyClient):
                 seen += images.size(0)
 
         train_loss = loss_sum / max(seen, 1)
+
         print(
             f"Local training complete: {self.num_train} training images, "
             f"loss={train_loss:.4f}"
         )
 
+        # Return locally trained weights to the server for FedAvg.
         return (
             get_parameters(self.model),
             self.num_train,
@@ -107,9 +147,11 @@ class BrainTumorClient(fl.client.NumPyClient):
         )
 
     def evaluate(self, parameters, config):
+        # Use the global parameters for local validation.
         set_parameters(self.model, parameters)
-        self.model.eval()
+        save_global_weights(self.model)
 
+        self.model.eval()
         loss_sum = 0.0
         correct = 0
         total = 0
@@ -123,7 +165,9 @@ class BrainTumorClient(fl.client.NumPyClient):
                 loss = self.loss_fn(outputs, labels)
 
                 loss_sum += loss.item() * images.size(0)
-                correct += (outputs.argmax(dim=1) == labels).sum().item()
+                correct += (
+                    outputs.argmax(dim=1) == labels
+                ).sum().item()
                 total += labels.size(0)
 
         if total == 0:
@@ -137,7 +181,11 @@ class BrainTumorClient(fl.client.NumPyClient):
             f"accuracy={accuracy:.2%}, samples={total}"
         )
 
-        return float(val_loss), total, {"accuracy": float(accuracy)}
+        return (
+            float(val_loss),
+            total,
+            {"accuracy": float(accuracy)},
+        )
 
 
 def main():
@@ -147,6 +195,7 @@ def main():
     args = parser.parse_args()
 
     client = BrainTumorClient(args.data)
+
     fl.client.start_client(
         server_address=args.server,
         client=client.to_client(),
@@ -155,3 +204,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
