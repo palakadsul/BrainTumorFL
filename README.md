@@ -44,7 +44,7 @@ BrainTumorFL/
 ## Architecture
 
 ```text
-Aryan's client                 Gauri's client
+   client 1                        client 2
 (local dataset)                (local dataset)
       |                              |
       +---------- local training ----+
