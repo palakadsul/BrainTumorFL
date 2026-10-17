@@ -72,7 +72,7 @@ client 1 dashboard      client 2 dashboard
 - Python and the dependencies listed in `requirements.txt`.
 - Git.
 - A local MRI dataset on each training client, arranged as expected by `client/client.py`.
-- For a live demo, the computers must be able to reach Palak's Mac over the same network.
+- For a live demo, the computers must be able to reach server's Mac over the same network.
 
 ## Installation
 
@@ -166,7 +166,7 @@ The server terminal should show the training rounds, client evaluation accuracie
 
 ## Run the model-sharing service
 
-Once the trained global model and metrics are present on Palak's computer, start the HTTP service in a separate terminal:
+Once the trained global model and metrics are present on server's computer, start the HTTP service in a separate terminal:
 
 ```bash
 python -m server.model_share
@@ -185,7 +185,7 @@ curl http://127.0.0.1:8082/health
 curl http://127.0.0.1:8082/metrics
 ```
 
-From another computer, use Palak's current IP address:
+From another computer, use server's current IP address:
 
 ```bash
 curl http://172.16.237.173:8082/health
@@ -214,12 +214,12 @@ The dashboard retrieves current metrics from server's sharing service. On image 
 
 You do **not** need to retrain just to demonstrate prediction with an existing saved model.
 
-1. On Palak's Mac, start `python -m server.model_share`.
+1. On server's Mac, start `python -m server.model_share`.
 2. Start `python -m dashboard.app` on each computer that needs a UI.
 3. Confirm the dashboard says the server metrics were received.
 4. Upload an MRI image and review the prediction.
 
-For a fresh training demonstration, also start `python -m server.server` and both client commands above. After training, ensure the model and metrics served by the sharing service are the results of that run.
+For a fresh training demonstration, also start `python -m server.py` and both client commands above. After training, ensure the model and metrics served by the sharing service are the results of that run.
 
 ## Recorded results from the previous run
 
