@@ -55,7 +55,7 @@ BrainTumorFL/
        client evaluation metrics
                      |
                      v
-             Palak's computer
+             server's computer
        global model + metrics files
                      |
               HTTP service :8082
@@ -63,8 +63,8 @@ BrainTumorFL/
                      |
              +-------+-------+
              v               v
-       Aryan dashboard   Gauri dashboard
-       MRI upload UI     MRI upload UI
+client 1 dashboard      client 2 dashboard
+    MRI upload UI          MRI upload UI
 ```
 
 ## Requirements
@@ -208,7 +208,7 @@ Open this URL in the browser on that same computer:
 http://127.0.0.1:5000
 ```
 
-The dashboard retrieves current metrics from Palak's sharing service. On image submission, it downloads the global model and performs inference locally.
+The dashboard retrieves current metrics from server's sharing service. On image submission, it downloads the global model and performs inference locally.
 
 ### Typical daily demo startup (reuse the trained model)
 
