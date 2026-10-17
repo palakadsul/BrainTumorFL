@@ -127,7 +127,7 @@ Check `client/client.py` and `common/config.py` if your dataset layout differs.
 
 Use separate terminals. Start the server first.
 
-### 1. Start the Flower server (Palak)
+### 1. Start the Flower server 
 
 From the project root:
 
@@ -137,25 +137,25 @@ python -m server.server
 
 The current setup uses Flower address `0.0.0.0:8081`. Confirm the address in `server/server.py` if the configuration has changed. Keep this terminal running.
 
-### 2. Start Aryan's client
+### 2. Start client 1
 
-Activate the project environment on Aryan's Mac, then run:
+Activate the project environment on client 1, then run:
 
 ```bash
 python -m client.client \
   --server 172.16.237.173:8081 \
   --data "/path/to/your/dataset" \
-  --client-id Aryan
+  --client-id name
 ```
 
 Replace the example data path with the real dataset directory.
 
-### 3. Start Gauri's client
+### 3. Start client 2
 
 On Gauri's Windows computer:
 
 ```powershell
-python -m client.client --server 172.16.237.173:8081 --data "D:\path\to\your\dataset" --client-id Gauri
+python -m client.client --server 172.16.237.173:8081 --data "D:\path\to\your\dataset" --client-id name
 ```
 
 Replace the example path with the real dataset directory.
@@ -192,7 +192,7 @@ curl http://172.16.237.173:8082/health
 curl http://172.16.237.173:8082/metrics
 ```
 
-If Palak's IP changes, update `MODEL_SERVER` in `dashboard/app.py` on the shared codebase and push the change. The sharing service must stay running while teammates use their dashboards.
+If server's IP changes, update `MODEL_SERVER` in `dashboard/app.py` on the shared codebase and push the change. The sharing service must stay running while teammates use their dashboards.
 
 ## Run the MRI upload dashboard
 
@@ -227,8 +227,8 @@ The completed three-round run reported these round 3 values:
 
 | Metric | Recorded value |
 |---|---:|
-| Aryan client evaluation accuracy | 99.10% |
-| Gauri client evaluation accuracy | 98.25% |
+| client 1 evaluation accuracy | 99.10% |
+| client 2 evaluation accuracy | 98.25% |
 | Simple average accuracy | 98.67% |
 | Sample-weighted average accuracy | 98.65% |
 
@@ -252,12 +252,12 @@ Only stop the process if you have confirmed it is an old dashboard you own. Do n
 curl http://127.0.0.1:8082/health
 ```
 
-Confirm `server.model_share` is running and that `models/global_model.pth` and `models/metrics.json` exist on Palak's computer.
+Confirm `server.model_share` is running and that `models/global_model.pth` and `models/metrics.json` exist on server's computer.
 
 ### Dashboard cannot receive metrics
 
 - Confirm the computers can reach one another over the network.
-- Confirm Palak's current IP address.
+- Confirm server's current IP address.
 - Check `MODEL_SERVER` in `dashboard/app.py`.
 - Test `/health` and `/metrics` from the client computer.
 - Check firewall settings if the service runs locally but is unreachable remotely.
